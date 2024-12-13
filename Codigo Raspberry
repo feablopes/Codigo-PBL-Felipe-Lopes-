@@ -1,0 +1,95 @@
+import time
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+from hx711 import HX711
+from mpu6050 import mpu6050
+
+# Configuração do HX711
+hx = HX711(dout_pin=5, pd_sck_pin=6)  # Pinos GPIO  
+print(dir(hx))
+SCALE_RATIO = 15000
+
+imu = mpu6050(0x1c)
+
+torque_values = []
+angular_velocity_x = []
+angular_velocity_y = []
+time_stamps = []
+ 
+def read_weight():
+    """""
+    """
+    try:
+        raw_data = hx.get_raw_data()  # Média de 10 leituras
+        if not raw_data or len(raw_data) == 0:
+            raise ValueError("Nenhum dado foi recebido da celula.")
+        raw_weight = sum(raw_data) / len(raw_data)  
+        weight = raw_weight / SCALE_RATIO
+        return weight
+    except Exception  as e:
+        print(f"Erro ao acessar a celula de carga: {e}")
+        return None        
+
+def read_imu_data():
+    """
+    Lê os dados do giroscópio e do acelerômetro do MPU6050.
+    """
+    try:
+        gyro_data = imu.get_gyro_data()
+        return {"gyro": gyro_data}
+    except Exception as e:
+        print(f"Erro ao acessar a IMU: {e}")
+        return None
+
+def update (frame):
+    global torque_values, angular_velocity_x, angular_velocity_y, time_stamps
+
+    weight = read_weight()
+    torque = weight * 0.1
+    torque_values.append(torque)
+    print(f"Torque calculado: {torque:2f} Nm")
+    imu_data = read_imu_data()
+    if imu_data is None:
+        print("Erro ao acessar a IMU")
+        return
+    gyro_data = imu_data.get("gyro")
+
+   
+    angular_velocity_x.append(gyro_data.get("x",0))
+    angular_velocity_y.append(gyro_data.get("y",0))
+    time_stamps.append(time.time())
+ 
+    if len(time_stamps) > 100:
+        time_stamps.pop(0)
+        angular_velocity_x.pop(0)
+        angular_velocity_y.pop(0)
+
+    ax1.clear()
+    ax1.plot(time_stamps, angular_velocity_x, label="Velocidade angular X",color="green")
+    ax1.set_title("Velocidade angular X")
+    ax1.set_xlabel("Tempo (s)")
+    ax1.set_ylabel("Velocidade angular")
+    ax1.legend()
+
+    ax2.clear()
+    ax2.plot(time_stamps, angular_velocity_y, label="Velocidade angular Y", color="green")
+    ax2.set_title("Velocidade angular Y")
+    ax2.set_xlabel("Tempo (s)")
+    ax2.set_ylabel("Velocidade angular")
+    ax2.legend()
+
+    ax3.clear()
+    ax3.plot(time_stamps, torque_values, label="Torque (Nm)", color="green")
+    ax3.set_title("Torque do Punho")
+    ax3.set_xlabel("Tempo (s)")
+    ax3.set_ylabel("Torque (Nm)")
+    ax3.legend()
+
+    line_x, = ax1.plot([], [], label="Velocidade angular X", color="green")
+    line_y, = ax2.plot([],[], label="Velocidade angular Y", color="green")
+    line_z, = ax3.plot([],[], label="Torque", color="red")
+
+fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(8, 6))
+ani = FuncAnimation(fig, update,frames=200, blit=False, repeat=True)
+plt.tight_layout()
+plt.show()
